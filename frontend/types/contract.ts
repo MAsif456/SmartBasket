@@ -20,6 +20,12 @@ export type StoreId =
   | "lidl"
   | "waitrose";
 
+// per-item brand stance set by the shopper (via the LLM or the UI)
+//   "none"       -> no preference
+//   "whitelabel" -> supermarket own-brand / value
+//   "specific"   -> a named brand (see ParsedItem.brand)
+export type BrandPreference = "none" | "whitelabel" | "specific";
+
 export interface Filters {
   location?: string; // postcode or city (cosmetic today)
   maxBudget?: number; // £
@@ -46,9 +52,13 @@ export interface ParsedItem {
   category?: string; // "dairy","bakery"
   note?: string; // "for bolognese"
   confidence: number; // 0..1
+  brandPreference: BrandPreference; // per-item brand stance (default "none")
+  brand?: string | null; // named brand when brandPreference === "specific"
+  stores?: StoreId[] | null; // per-item supermarket preference; null = any
 }
 
 export interface ParseResponse {
+  postcode: string | null; // UK postcode if the shopper gave one, else null
   items: ParsedItem[];
   assumptions: string[]; // ["assumed 500g mince for 4 people"]
   unresolved: string[]; // prompt fragments not turned into items

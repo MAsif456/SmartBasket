@@ -27,6 +27,7 @@ interface BasketState {
   prompt: string;
   filters: Filters;
   pantry: string[];
+  postcode: string | null;
   items: ParsedItem[];
   assumptions: string[];
   unresolved: string[];
@@ -64,6 +65,7 @@ export const useBasket = create<BasketState>((set, get) => ({
   prompt: "",
   filters: { preferOwnBrand: false },
   pantry: [],
+  postcode: null,
   items: [],
   assumptions: [],
   unresolved: [],
@@ -114,6 +116,7 @@ export const useBasket = create<BasketState>((set, get) => ({
         items: res.items,
         assumptions: res.assumptions,
         unresolved: res.unresolved,
+        postcode: res.postcode,
         stage: "review",
         status: "idle",
       });
@@ -131,6 +134,9 @@ export const useBasket = create<BasketState>((set, get) => ({
       quantity: 1,
       unit: "each",
       confidence: 1,
+      brandPreference: "none",
+      brand: null,
+      stores: null,
     };
     set({ items: [...get().items, item] });
   },
@@ -174,6 +180,7 @@ export const useBasket = create<BasketState>((set, get) => ({
       status: "idle",
       error: null,
       prompt: "",
+      postcode: null,
       items: [],
       assumptions: [],
       unresolved: [],

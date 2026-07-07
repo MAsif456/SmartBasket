@@ -5,78 +5,123 @@ import {
   ArrowLeft,
   ArrowRight,
   Info,
+  MapPin,
   Minus,
   Plus,
+  SlidersHorizontal,
   Trash2,
   AlertCircle,
 } from "lucide-react";
 import { useBasket } from "@/store/basket";
 import type { ParsedItem } from "@/types/contract";
-import { Button, Card, Input } from "@/components/ui";
+import { STORES } from "@/lib/stores";
+import { Badge, Button, Card, Input } from "@/components/ui";
 import { FilterBar } from "@/components/FilterBar";
+import { ItemPreferences } from "@/components/ItemPreferences";
 import { cn } from "@/lib/utils";
 
 const LOW_CONFIDENCE = 0.85;
 
+function PrefBadges({ item }: { item: ParsedItem }) {
+  const storeIds = item.stores ?? [];
+  return (
+    <>
+      {item.brandPreference === "specific" && item.brand && (
+        <Badge tone="primary">{item.brand}</Badge>
+      )}
+      {item.brandPreference === "whitelabel" && (
+        <Badge tone="neutral">Own-brand</Badge>
+      )}
+      {storeIds.length > 0 && (
+        <Badge tone="accent" className="gap-1">
+          <MapPin size={10} />
+          {STORES[storeIds[0]].name}
+          {storeIds.length > 1 ? ` +${storeIds.length - 1}` : ""}
+        </Badge>
+      )}
+    </>
+  );
+}
+
 function ItemRow({ item }: { item: ParsedItem }) {
   const updateItem = useBasket((s) => s.updateItem);
   const removeItem = useBasket((s) => s.removeItem);
+  const [showPrefs, setShowPrefs] = useState(false);
   const low = item.confidence < LOW_CONFIDENCE;
 
   return (
-    <div className="flex items-center gap-3 py-3">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-medium capitalize truncate">{item.name}</span>
-          {low && (
-            <span
-              className="inline-flex items-center gap-1 text-accent-foreground/80"
-              title="We inferred this from your text — double-check it"
-            >
-              <AlertCircle size={13} className="text-accent" />
-            </span>
+    <div className="py-3">
+      <div className="flex items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="font-medium capitalize truncate">{item.name}</span>
+            {low && (
+              <span
+                className="inline-flex items-center gap-1 text-accent-foreground/80"
+                title="We inferred this from your text — double-check it"
+              >
+                <AlertCircle size={13} className="text-accent" />
+              </span>
+            )}
+            <PrefBadges item={item} />
+          </div>
+          {item.note && (
+            <span className="text-xs text-muted-foreground">{item.note}</span>
           )}
         </div>
-        {item.note && (
-          <span className="text-xs text-muted-foreground">{item.note}</span>
-        )}
+
+        <button
+          onClick={() => setShowPrefs((o) => !o)}
+          className={cn(
+            "grid place-items-center h-8 w-8 rounded-full transition-colors",
+            showPrefs
+              ? "bg-primary-soft text-primary"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          )}
+          aria-label={`Preferences for ${item.name}`}
+          title="Brand & store preferences"
+        >
+          <SlidersHorizontal size={15} />
+        </button>
+
+        <div className="flex items-center rounded-full border border-border">
+          <button
+            className="grid place-items-center h-8 w-8 text-muted-foreground hover:text-foreground disabled:opacity-40"
+            onClick={() =>
+              updateItem(item.id, {
+                quantity: Math.max(1, item.quantity - stepFor(item)),
+              })
+            }
+            disabled={item.quantity <= 1}
+            aria-label="Decrease quantity"
+          >
+            <Minus size={14} />
+          </button>
+          <span className="w-14 text-center text-sm tabular-nums">
+            {item.quantity}
+            <span className="text-muted-foreground ml-0.5">{item.unit}</span>
+          </span>
+          <button
+            className="grid place-items-center h-8 w-8 text-muted-foreground hover:text-foreground"
+            onClick={() =>
+              updateItem(item.id, { quantity: item.quantity + stepFor(item) })
+            }
+            aria-label="Increase quantity"
+          >
+            <Plus size={14} />
+          </button>
+        </div>
+
+        <button
+          className="grid place-items-center h-8 w-8 rounded-full text-muted-foreground hover:text-danger hover:bg-danger-soft"
+          onClick={() => removeItem(item.id)}
+          aria-label={`Remove ${item.name}`}
+        >
+          <Trash2 size={15} />
+        </button>
       </div>
 
-      <div className="flex items-center rounded-full border border-border">
-        <button
-          className="grid place-items-center h-8 w-8 text-muted-foreground hover:text-foreground disabled:opacity-40"
-          onClick={() =>
-            updateItem(item.id, {
-              quantity: Math.max(1, item.quantity - stepFor(item)),
-            })
-          }
-          disabled={item.quantity <= 1}
-          aria-label="Decrease quantity"
-        >
-          <Minus size={14} />
-        </button>
-        <span className="w-14 text-center text-sm tabular-nums">
-          {item.quantity}
-          <span className="text-muted-foreground ml-0.5">{item.unit}</span>
-        </span>
-        <button
-          className="grid place-items-center h-8 w-8 text-muted-foreground hover:text-foreground"
-          onClick={() =>
-            updateItem(item.id, { quantity: item.quantity + stepFor(item) })
-          }
-          aria-label="Increase quantity"
-        >
-          <Plus size={14} />
-        </button>
-      </div>
-
-      <button
-        className="grid place-items-center h-8 w-8 rounded-full text-muted-foreground hover:text-danger hover:bg-danger-soft"
-        onClick={() => removeItem(item.id)}
-        aria-label={`Remove ${item.name}`}
-      >
-        <Trash2 size={15} />
-      </button>
+      {showPrefs && <ItemPreferences item={item} />}
     </div>
   );
 }
@@ -89,6 +134,7 @@ export function ReviewStage() {
   const items = useBasket((s) => s.items);
   const assumptions = useBasket((s) => s.assumptions);
   const unresolved = useBasket((s) => s.unresolved);
+  const postcode = useBasket((s) => s.postcode);
   const addItem = useBasket((s) => s.addItem);
   const runCompare = useBasket((s) => s.runCompare);
   const goto = useBasket((s) => s.goto);
@@ -108,10 +154,17 @@ export function ReviewStage() {
         <ArrowLeft size={15} /> Edit prompt
       </button>
 
-      <h2 className="text-2xl font-bold tracking-tight">Review your basket</h2>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <h2 className="text-2xl font-bold tracking-tight">Review your basket</h2>
+        {postcode && (
+          <Badge tone="neutral" className="gap-1">
+            <MapPin size={12} /> {postcode}
+          </Badge>
+        )}
+      </div>
       <p className="mt-1 text-muted-foreground">
         {items.length} item{items.length === 1 ? "" : "s"} — tweak quantities,
-        add or remove anything before comparing.
+        set brand or store preferences, then compare.
       </p>
 
       {assumptions.length > 0 && (

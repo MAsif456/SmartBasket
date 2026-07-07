@@ -4,6 +4,7 @@
  * Swap for real endpoints via lib/api.ts (NEXT_PUBLIC_USE_MOCK).
  */
 import type {
+  BrandPreference,
   ComparisonResult,
   Filters,
   MatchedProduct,
@@ -146,6 +147,15 @@ function findSeed(name: string): Seed | null {
 }
 
 /* ---------------- PARSE (LLM stand-in) ---------------- */
+// crude UK postcode detector: matches a full postcode; falls back to a numeric location filter
+function detectPostcode(prompt: string, filters: Filters): string | null {
+  const m = prompt.match(/\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\b/i);
+  if (m) return `${m[1]} ${m[2]}`.toUpperCase();
+  const loc = filters.location?.trim();
+  if (loc && /\d/.test(loc)) return loc.toUpperCase();
+  return null;
+}
+
 function detectServings(text: string): number {
   const m =
     text.match(/for\s+(\d+)\s*(?:people|persons|ppl)?/) ||
@@ -170,6 +180,10 @@ function scaleQty(perPerson: number, servings: number, unit: string): number {
 export function mockParse(prompt: string, filters: Filters): ParseResponse {
   const text = prompt.toLowerCase();
   const servings = detectServings(text);
+  const postcode = detectPostcode(prompt, filters);
+  const wantsOwn =
+    !!filters.preferOwnBrand || /\bown[- ]?brand\b|\bvalue range\b|\bwhitelabel\b/.test(text);
+  const defaultBrandPref: BrandPreference = wantsOwn ? "whitelabel" : "none";
   const items: ParsedItem[] = [];
   const assumptions: string[] = [];
   let idc = 0;
@@ -195,6 +209,9 @@ export function mockParse(prompt: string, filters: Filters): ParseResponse {
           category: seed?.category,
           note: `for ${r.name}`,
           confidence: 0.9,
+          brandPreference: defaultBrandPref,
+          brand: null,
+          stores: null,
         });
       }
     }
@@ -214,6 +231,9 @@ export function mockParse(prompt: string, filters: Filters): ParseResponse {
         unit: seed.unit,
         category: seed.category,
         confidence: 0.84,
+        brandPreference: defaultBrandPref,
+        brand: null,
+        stores: null,
       });
     }
   }
@@ -253,21 +273,38 @@ export function mockParse(prompt: string, filters: Filters): ParseResponse {
     }
   }
 
-  return { items: kept, assumptions, unresolved: unresolved.slice(0, 4) };
+  if (postcode) assumptions.push(`Read '${postcode}' as your postcode.`);
+
+  return { postcode, items: kept, assumptions, unresolved: unresolved.slice(0, 4) };
 }
 
 /* ---------------- COMPARE (DB stand-in) ---------------- */
 function buildProduct(
   seed: Seed,
   store: StoreId,
-  preferOwnBrand: boolean
+  item: ParsedItem,
+  globalPreferOwn: boolean
 ): MatchedProduct {
   const discounter = DISCOUNTERS.includes(store);
-  const price = round2(seed.base * MULT[store] * jitter(seed.name + store));
-  const useOwn = preferOwnBrand || !seed.brand || discounter;
-  const brand = useOwn ? storeName(store) : seed.brand!;
+  const pref = item.brandPreference ?? "none";
+
+  let brand: string;
+  let isSubstitute = false;
+  let priceFactor = 1;
+
+  if (pref === "specific" && item.brand) {
+    brand = item.brand; // shopper insisted on this brand
+    priceFactor = 1.12; // named brands cost a bit more
+  } else if (pref === "whitelabel" || globalPreferOwn || !seed.brand || discounter) {
+    brand = storeName(store); // own-brand / value
+    isSubstitute = !!seed.brand; // swapped a named brand for own-brand
+    if (pref === "whitelabel") priceFactor = 0.92; // value range a touch cheaper
+  } else {
+    brand = seed.brand!; // default named brand
+  }
+
+  const price = round2(seed.base * MULT[store] * jitter(seed.name + store) * priceFactor);
   const title = `${brand} ${titleCase(seed.name)} ${seed.size}`.trim();
-  const isSubstitute = !!seed.brand && useOwn;
   const unavailable = seed.unavailableAt?.includes(store);
   return {
     productId: `${store}-${slug(seed.name)}`,
@@ -307,8 +344,19 @@ export function mockCompare(
     let total = 0;
     let unavailableCount = 0;
     const lines: StoreLineItem[] = items.map((it) => {
+      // per-item store preference: not wanted from this store
+      if (it.stores && it.stores.length && !it.stores.includes(store)) {
+        unavailableCount++;
+        return {
+          requestedItemId: it.id,
+          requestedName: it.name,
+          quantity: it.quantity,
+          matched: null,
+          lineTotal: 0,
+        };
+      }
       const seed = findSeed(it.name) ?? syntheticSeed(it.name);
-      const product = buildProduct(seed, store, preferOwn);
+      const product = buildProduct(seed, store, it, preferOwn);
       if (product.availability === "out_of_stock") {
         unavailableCount++;
         return {

@@ -43,23 +43,22 @@ a plain list ("milk, bread, eggs") **and** a meal plan ("spaghetti bolognese for
 ### Request
 ```json
 {
-  "prompt": "spaghetti bolognese for 4 people, plus milk and eggs",
-  "filters": { "preferOwnBrand": true, "stores": ["aldi", "tesco", "sainsburys"] }
+  "prompt": "Warburtons bread, own-brand milk from Aldi, Heinz beans, and eggs. I'm in M1 4WT",
+  "filters": { "stores": ["aldi", "tesco", "sainsburys"] }
 }
 ```
 
 ### Response
 ```json
 {
+  "postcode": "M1 4WT",
   "items": [
-    { "id": "i1", "name": "spaghetti",   "quantity": 500, "unit": "g",    "category": "pasta",  "note": "for bolognese", "confidence": 0.95 },
-    { "id": "i2", "name": "beef mince",  "quantity": 500, "unit": "g",    "category": "meat",   "note": "for bolognese", "confidence": 0.9 },
-    { "id": "i3", "name": "chopped tomatoes", "quantity": 2, "unit": "can", "category": "tinned", "note": "for bolognese", "confidence": 0.9 },
-    { "id": "i4", "name": "onion",       "quantity": 1,   "unit": "each", "category": "veg",    "confidence": 0.85 },
-    { "id": "i5", "name": "milk",        "quantity": 1,   "unit": "L",    "category": "dairy",  "confidence": 0.98 },
-    { "id": "i6", "name": "eggs",        "quantity": 6,   "unit": "each", "category": "dairy",  "confidence": 0.98 }
+    { "id": "i1", "name": "white bread", "quantity": 1, "unit": "loaf", "category": "bakery", "brandPreference": "specific",   "brand": "Warburtons", "stores": null,       "confidence": 0.9 },
+    { "id": "i2", "name": "milk",        "quantity": 1, "unit": "L",    "category": "dairy",  "brandPreference": "whitelabel", "brand": null,         "stores": ["aldi"],   "confidence": 0.9 },
+    { "id": "i3", "name": "baked beans", "quantity": 1, "unit": "can",  "category": "tinned", "brandPreference": "specific",   "brand": "Heinz",      "stores": null,       "confidence": 0.92 },
+    { "id": "i4", "name": "eggs",        "quantity": 6, "unit": "each", "category": "dairy",  "brandPreference": "none",       "brand": null,         "stores": null,       "confidence": 0.98 }
   ],
-  "assumptions": ["assumed 500g mince and 500g spaghetti for 4 people"],
+  "assumptions": ["Read 'M1 4WT' as your postcode."],
   "unresolved": []
 }
 ```
@@ -69,6 +68,12 @@ a plain list ("milk, bread, eggs") **and** a meal plan ("spaghetti bolognese for
 - `confidence` — 0..1; the UI flags low-confidence parses so the user can fix them.
 - `assumptions` — plain-English notes the UI shows ("assumed 500g mince…").
 - `unresolved` — bits of the prompt you couldn't turn into items (shown as a small note).
+- **`postcode`** — top-level. The shopper's UK postcode if given (uppercased/tidied), else `null`.
+- **`brandPreference`** (required, per item) — `"none"` (no preference), `"whitelabel"` (own-brand/value),
+  or `"specific"`. When `"specific"`, put the brand name in **`brand`**; otherwise `brand` is `null`.
+  If `filters.preferOwnBrand` is true, default items to `"whitelabel"` unless a brand is named.
+- **`stores`** (per item) — supermarket ids the shopper wants THIS item from (e.g. `["aldi"]`), or `null`
+  for no preference. Only record the stated preference; don't pick a store yourself.
 - **`filters.pantry`** — a list of items the shopper already has at home. **Exclude** any of
   these from `items` (match on your canonical name), and add an `assumptions` line naming what
   you skipped, e.g. `"Skipped pasta, onions — you already have them."`. Never output a pantry item.
@@ -137,6 +142,9 @@ Match each requested item to a real product **in each store**, price it, and ret
 - `isSubstitute: true` when you swapped a named brand for an own-brand (brief example: Philadelphia → own-brand soft cheese). The UI shows a "swap & save" badge.
 - `alternatives` — optional other matches the user could pick instead (shown in a popover).
 - `imageUrl` / `logoUrl` may be `null` — the UI has fallbacks.
+- **Honour per-item preferences** carried on each `ParsedItem`:
+  - `brandPreference: "specific"` → match that `brand`; `"whitelabel"` → match own-brand and set `isSubstitute` if it replaces a named brand; `"none"` → your normal best match.
+  - `stores: [...]` → the shopper only wants that item from those stores. At any store NOT in the list, return `matched: null` for that line (and count it in `unavailableCount`).
 
 ---
 
