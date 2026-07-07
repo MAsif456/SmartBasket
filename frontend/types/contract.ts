@@ -27,6 +27,7 @@ export interface Filters {
   brands?: string[]; // e.g. ["Warburtons"]
   dietary?: string[]; // ["vegetarian","gluten-free"]
   stores?: StoreId[]; // which to compare; default = all
+  pantry?: string[]; // items the user already has at home; /api/parse excludes these
 }
 
 // =====================================================================

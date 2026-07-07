@@ -167,7 +167,7 @@ function scaleQty(perPerson: number, servings: number, unit: string): number {
   return Math.max(1, Math.round(raw));
 }
 
-export function mockParse(prompt: string, _filters: Filters): ParseResponse {
+export function mockParse(prompt: string, filters: Filters): ParseResponse {
   const text = prompt.toLowerCase();
   const servings = detectServings(text);
   const items: ParsedItem[] = [];
@@ -233,7 +233,27 @@ export function mockParse(prompt: string, _filters: Filters): ParseResponse {
     }
   }
 
-  return { items, assumptions, unresolved: unresolved.slice(0, 4) };
+  // 4) exclude anything the user already has at home (pantry)
+  const pantry = filters.pantry ?? [];
+  let kept = items;
+  if (pantry.length) {
+    const pantryCanon = pantry.map((p) => (findSeed(p)?.name ?? p.toLowerCase()).trim());
+    const excluded: string[] = [];
+    kept = items.filter((it) => {
+      const owned = pantryCanon.some(
+        (pc) => pc === it.name || it.name.includes(pc) || pc.includes(it.name)
+      );
+      if (owned) excluded.push(it.name);
+      return !owned;
+    });
+    if (excluded.length) {
+      assumptions.push(
+        `Skipped ${excluded.join(", ")} — you said you already have ${excluded.length === 1 ? "it" : "them"}.`
+      );
+    }
+  }
+
+  return { items: kept, assumptions, unresolved: unresolved.slice(0, 4) };
 }
 
 /* ---------------- COMPARE (DB stand-in) ---------------- */

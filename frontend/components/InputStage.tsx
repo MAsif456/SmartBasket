@@ -5,6 +5,7 @@ import { useBasket } from "@/store/basket";
 import { EXAMPLE_PROMPTS } from "@/lib/mock";
 import { Button, Textarea } from "@/components/ui";
 import { FilterBar } from "@/components/FilterBar";
+import { PantryEditor } from "@/components/PantryEditor";
 
 export function InputStage() {
   const prompt = useBasket((s) => s.prompt);
@@ -55,8 +56,9 @@ export function InputStage() {
           ))}
         </div>
 
-        <div className="mt-5">
+        <div className="mt-5 space-y-3">
           <FilterBar />
+          <PantryEditor />
         </div>
 
         <Button

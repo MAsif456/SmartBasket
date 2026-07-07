@@ -29,6 +29,7 @@ interface Filters {
   brands?: string[];          // e.g. ["Warburtons"]
   dietary?: string[];         // ["vegetarian","gluten-free"]
   stores?: StoreId[];         // which to compare; default = all
+  pantry?: string[];          // items the user already has at home — /api/parse excludes these
 }
 ```
 
@@ -68,6 +69,9 @@ a plain list ("milk, bread, eggs") **and** a meal plan ("spaghetti bolognese for
 - `confidence` — 0..1; the UI flags low-confidence parses so the user can fix them.
 - `assumptions` — plain-English notes the UI shows ("assumed 500g mince…").
 - `unresolved` — bits of the prompt you couldn't turn into items (shown as a small note).
+- **`filters.pantry`** — a list of items the shopper already has at home. **Exclude** any of
+  these from `items` (match on your canonical name), and add an `assumptions` line naming what
+  you skipped, e.g. `"Skipped pasta, onions — you already have them."`. Never output a pantry item.
 
 ---
 

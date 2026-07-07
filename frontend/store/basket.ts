@@ -10,6 +10,7 @@ export type Stage = "input" | "review" | "results";
 export type Status = "idle" | "parsing" | "comparing" | "error";
 
 const SAVE_KEY = "smartbasket.saved";
+const PANTRY_KEY = "smartbasket.pantry";
 
 interface SavedBasket {
   prompt: string;
@@ -25,6 +26,7 @@ interface BasketState {
 
   prompt: string;
   filters: Filters;
+  pantry: string[];
   items: ParsedItem[];
   assumptions: string[];
   unresolved: string[];
@@ -33,6 +35,10 @@ interface BasketState {
 
   setPrompt: (p: string) => void;
   setFilters: (f: Partial<Filters>) => void;
+
+  addPantry: (name: string) => void;
+  removePantry: (name: string) => void;
+  loadPantry: () => void;
 
   runParse: () => Promise<void>;
   addItem: (name: string) => void;
@@ -57,6 +63,7 @@ export const useBasket = create<BasketState>((set, get) => ({
 
   prompt: "",
   filters: { preferOwnBrand: false },
+  pantry: [],
   items: [],
   assumptions: [],
   unresolved: [],
@@ -66,12 +73,43 @@ export const useBasket = create<BasketState>((set, get) => ({
   setPrompt: (p) => set({ prompt: p }),
   setFilters: (f) => set({ filters: { ...get().filters, ...f } }),
 
+  addPantry: (name) => {
+    const clean = name.trim().toLowerCase();
+    if (!clean || get().pantry.includes(clean)) return;
+    const next = [...get().pantry, clean];
+    set({ pantry: next });
+    try {
+      localStorage.setItem(PANTRY_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  },
+
+  removePantry: (name) => {
+    const next = get().pantry.filter((p) => p !== name);
+    set({ pantry: next });
+    try {
+      localStorage.setItem(PANTRY_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  },
+
+  loadPantry: () => {
+    try {
+      const raw = localStorage.getItem(PANTRY_KEY);
+      if (raw) set({ pantry: JSON.parse(raw) });
+    } catch {
+      /* ignore */
+    }
+  },
+
   runParse: async () => {
-    const { prompt, filters } = get();
+    const { prompt, filters, pantry } = get();
     if (!prompt.trim()) return;
     set({ status: "parsing", error: null });
     try {
-      const res = await parseBasket(prompt, filters);
+      const res = await parseBasket(prompt, { ...filters, pantry });
       set({
         items: res.items,
         assumptions: res.assumptions,

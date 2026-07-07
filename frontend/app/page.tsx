@@ -14,10 +14,12 @@ export default function Home() {
   const status = useBasket((s) => s.status);
   const error = useBasket((s) => s.error);
   const checkSaved = useBasket((s) => s.checkSaved);
+  const loadPantry = useBasket((s) => s.loadPantry);
 
   useEffect(() => {
     checkSaved();
-  }, [checkSaved]);
+    loadPantry();
+  }, [checkSaved, loadPantry]);
 
   return (
     <div className="flex min-h-full flex-col">
