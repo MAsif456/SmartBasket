@@ -122,7 +122,51 @@ def _extract_json(text: str) -> dict:
         braces = re.search(r"\{.*\}", text, re.DOTALL)
         if braces:
             text = braces.group(0)
-    return json.loads(text)
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # Salvage a truncated response by keeping only the complete items that
+        # were emitted before the cut-off, then closing the JSON ourselves.
+        salvaged = _salvage_truncated_items(text)
+        if salvaged is not None:
+            logger.warning("Recovered %d item(s) from truncated JSON response", len(salvaged["items"]))
+            return salvaged
+        raise
+
+
+def _salvage_truncated_items(text: str) -> dict | None:
+    """Best-effort recovery: extract every fully-closed item object from a
+    truncated `{"items": [ {...}, {...}, {...`  response."""
+    items_match = re.search(r'"items"\s*:\s*\[', text)
+    if not items_match:
+        return None
+
+    depth = 0
+    start = None
+    objects: list[str] = []
+    for i in range(items_match.end(), len(text)):
+        ch = text[i]
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0 and start is not None:
+                objects.append(text[start : i + 1])
+                start = None
+
+    parsed_items = []
+    for obj in objects:
+        try:
+            parsed_items.append(json.loads(obj))
+        except json.JSONDecodeError:
+            continue
+
+    if not parsed_items:
+        return None
+    return {"items": parsed_items, "assumptions": [], "unresolved": []}
 
 
 def parse_basket(prompt: str, filters: Filters) -> ParseResponse:
@@ -136,7 +180,16 @@ def parse_basket(prompt: str, filters: Filters) -> ParseResponse:
 
     logger.info("Calling Ollama model=%r with prompt=%r filters=%r", MODEL_NAME, prompt, filters)
     try:
-        response = ollama.chat(model=MODEL_NAME, messages=messages)
+        response = ollama.chat(
+            model=MODEL_NAME,
+            messages=messages,
+            # Force valid-JSON output so the grammar can't produce broken syntax,
+            # and give the model enough context + output budget to finish long
+            # baskets (a 20+ item list overflows the default 2048-token window,
+            # which was truncating the JSON mid-object).
+            format="json",
+            options={"num_ctx": 8192, "num_predict": 4096, "temperature": 0.2},
+        )
     except Exception:
         logger.exception("Ollama chat call failed (model=%r)", MODEL_NAME)
         raise
