@@ -113,25 +113,46 @@ items to cover them. Non-food requests always go here.
 """
 
 
+def _log_stage(stage: str, message: str = "") -> None:
+    """Log a clearly delimited stage banner so each step is easy to spot."""
+    logger.info("----- [llm_parser] STAGE: %s -----", stage)
+    if message:
+        logger.info(message)
+
+
 def _extract_json(text: str) -> dict:
+    _log_stage("EXTRACT JSON", f"Raw text length: {len(text)} chars")
+    original = text
     text = text.strip()
+
     fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.DOTALL)
     if fenced:
         text = fenced.group(1)
+        _log_stage("EXTRACT JSON", "Found a fenced ```json code block; stripped the fences.")
     else:
         braces = re.search(r"\{.*\}", text, re.DOTALL)
         if braces:
             text = braces.group(0)
+            _log_stage("EXTRACT JSON", "No code fences; grabbed the first {...} object span.")
+        else:
+            _log_stage("EXTRACT JSON", "WARNING: no JSON object found in the response at all.")
+
+    if text != original.strip():
+        logger.info("Candidate JSON to parse:\n%s", text)
 
     try:
-        return json.loads(text)
-    except json.JSONDecodeError:
+        parsed = json.loads(text)
+        _log_stage("EXTRACT JSON", "json.loads() succeeded - response was valid JSON.")
+        return parsed
+    except json.JSONDecodeError as exc:
+        _log_stage("EXTRACT JSON", f"json.loads() FAILED: {exc}. Attempting salvage of complete items...")
         # Salvage a truncated response by keeping only the complete items that
         # were emitted before the cut-off, then closing the JSON ourselves.
         salvaged = _salvage_truncated_items(text)
         if salvaged is not None:
             logger.warning("Recovered %d item(s) from truncated JSON response", len(salvaged["items"]))
             return salvaged
+        _log_stage("EXTRACT JSON", "Salvage failed - no complete items could be recovered.")
         raise
 
 
@@ -157,11 +178,13 @@ def _salvage_truncated_items(text: str) -> dict | None:
                 objects.append(text[start : i + 1])
                 start = None
 
+    logger.info("Salvage found %d brace-balanced object(s) in the items array.", len(objects))
     parsed_items = []
     for obj in objects:
         try:
             parsed_items.append(json.loads(obj))
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
+            logger.info("  - skipping unparseable salvaged object: %s (%s)", obj[:80], exc)
             continue
 
     if not parsed_items:
@@ -170,6 +193,10 @@ def _salvage_truncated_items(text: str) -> dict | None:
 
 
 def parse_basket(prompt: str, filters: Filters) -> ParseResponse:
+    # ---- STAGE 1: what the shopper sent us ----
+    _log_stage("1. INPUT", f"prompt={prompt!r}")
+    _log_stage("1. INPUT", f"filters={filters.model_dump(exclude_none=True)}")
+
     user_content = json.dumps(
         {"prompt": prompt, "filters": filters.model_dump(exclude_none=True)}
     )
@@ -178,7 +205,10 @@ def parse_basket(prompt: str, filters: Filters) -> ParseResponse:
         {"role": "user", "content": user_content},
     ]
 
-    logger.info("Calling Ollama model=%r with prompt=%r filters=%r", MODEL_NAME, prompt, filters)
+    # ---- STAGE 2: exactly what we send to the model ----
+    _log_stage("2. LLM REQUEST", f"model={MODEL_NAME!r}")
+    _log_stage("2. LLM REQUEST", f"user message -> {user_content}")
+
     try:
         # NOTE: do NOT set format="json" here. Ollama's JSON grammar makes smaller
         # models (e.g. gemma) close the items array early and emit only one item,
@@ -197,18 +227,26 @@ def parse_basket(prompt: str, filters: Filters) -> ParseResponse:
         raise
 
     content = response.message.content
-    logger.info("Ollama raw response: %s", content)
 
+    # ---- STAGE 3: raw text the model produced ----
+    _log_stage("3. LLM RAW RESPONSE", f"length={len(content)} chars")
+    logger.info("Raw response body:\n%s", content)
+
+    # ---- STAGE 4: turn that text into a JSON dict ----
     try:
         raw = _extract_json(content)
     except json.JSONDecodeError:
         logger.exception("Failed to parse JSON from Ollama response: %s", content)
         raise
 
+    _log_stage("4. PARSED JSON", json.dumps(raw, indent=2, ensure_ascii=False))
+
+    # ---- STAGE 5: map each raw item onto our ParsedItem contract ----
+    _log_stage("5. BUILD ITEMS", f"model returned {len(raw.get('items', []))} item(s)")
     items = []
     for idx, raw_item in enumerate(raw.get("items", []), start=1):
-        items.append(
-            ParsedItem(
+        try:
+            item = ParsedItem(
                 id=str(raw_item.get("id") or f"i{idx}"),
                 name=raw_item["name"],
                 quantity=raw_item.get("quantity", 1),
@@ -217,10 +255,24 @@ def parse_basket(prompt: str, filters: Filters) -> ParseResponse:
                 note=raw_item.get("note"),
                 confidence=raw_item.get("confidence", 0.5),
             )
-        )
+        except (KeyError, TypeError, ValueError) as exc:
+            logger.warning("  - skipping malformed item #%d %r: %s", idx, raw_item, exc)
+            continue
+        items.append(item)
+        logger.info("  [%d] %s x%s %s (cat=%s conf=%s)",
+                    idx, item.name, item.quantity, item.unit, item.category, item.confidence)
 
-    return ParseResponse(
+    result = ParseResponse(
         items=items,
         assumptions=raw.get("assumptions", []),
         unresolved=raw.get("unresolved", []),
     )
+
+    # ---- STAGE 6: what we hand back to the frontend / compare step ----
+    _log_stage("6. RESULT", f"{len(result.items)} item(s), "
+                            f"{len(result.assumptions)} assumption(s), "
+                            f"{len(result.unresolved)} unresolved fragment(s)")
+    if result.unresolved:
+        logger.info("Unresolved fragments: %s", result.unresolved)
+
+    return result
