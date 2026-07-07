@@ -180,15 +180,17 @@ def parse_basket(prompt: str, filters: Filters) -> ParseResponse:
 
     logger.info("Calling Ollama model=%r with prompt=%r filters=%r", MODEL_NAME, prompt, filters)
     try:
+        # NOTE: do NOT set format="json" here. Ollama's JSON grammar makes smaller
+        # models (e.g. gemma) close the items array early and emit only one item,
+        # which is why a "lamb, beef, waffles, potatoes" list came back as just
+        # potatoes. Free-form generation (as in the original working llm_script.py)
+        # follows the system prompt and lists every item. We still raise num_ctx /
+        # num_predict so long baskets don't overflow the 2048-token default and
+        # truncate the JSON mid-object.
         response = ollama.chat(
             model=MODEL_NAME,
             messages=messages,
-            # Force valid-JSON output so the grammar can't produce broken syntax,
-            # and give the model enough context + output budget to finish long
-            # baskets (a 20+ item list overflows the default 2048-token window,
-            # which was truncating the JSON mid-object).
-            format="json",
-            options={"num_ctx": 8192, "num_predict": 4096, "temperature": 0.2},
+            options={"num_ctx": 8192, "num_predict": 4096},
         )
     except Exception:
         logger.exception("Ollama chat call failed (model=%r)", MODEL_NAME)
