@@ -1,0 +1,23 @@
+```
+You: chicken and uncle bens rice and also vegetables
+Bot: ```json
+{
+  "grocery_items": [
+    {
+      "item": "Chicken",
+      "brand_preference": null
+    },
+    {
+      "item": "Rice",
+      "brand_preference": "Uncle Ben's"
+    },
+    {
+      "item": "Vegetables",
+      "brand_preference": null
+    }
+  ],
+  "postcode_included": false,
+  "budget_stated": false,
+  "supermarket_preference": null
+}
+```
