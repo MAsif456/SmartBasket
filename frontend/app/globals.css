@@ -1,0 +1,125 @@
+@import "tailwindcss";
+
+/*
+  SmartBasket design tokens.
+  Fresh-green brand (grocery + savings). Light and dark themes.
+*/
+:root {
+  --background: #f6f7f4;
+  --foreground: #14251b;
+  --card: #ffffff;
+  --card-foreground: #14251b;
+  --muted: #eef1ea;
+  --muted-foreground: #5f6b60;
+  --border: #e2e6dc;
+  --input: #e2e6dc;
+  --ring: #16a34a;
+
+  --primary: #16a34a; /* green-600 */
+  --primary-foreground: #ffffff;
+  --primary-soft: #dcfce7; /* green-100 */
+
+  --accent: #f59e0b; /* amber-500 — savings / cheapest */
+  --accent-foreground: #3d2a04;
+  --accent-soft: #fef3c7;
+
+  --danger: #dc2626;
+  --danger-soft: #fee2e2;
+
+  --radius: 0.85rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0c110e;
+    --foreground: #e8efe9;
+    --card: #131a15;
+    --card-foreground: #e8efe9;
+    --muted: #1a231c;
+    --muted-foreground: #9aa89d;
+    --border: #24302a;
+    --input: #24302a;
+    --ring: #22c55e;
+
+    --primary: #22c55e;
+    --primary-foreground: #052e14;
+    --primary-soft: #14331f;
+
+    --accent: #fbbf24;
+    --accent-foreground: #2a1c02;
+    --accent-soft: #33280c;
+
+    --danger: #f87171;
+    --danger-soft: #3a1414;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 0.25rem);
+  --radius-sm: calc(var(--radius) - 0.4rem);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* subtle scrollbar for the horizontal store comparison */
+.scroll-x {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.scroll-x::-webkit-scrollbar {
+  height: 8px;
+}
+.scroll-x::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}
+
+@keyframes sb-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-rise {
+  animation: sb-rise 0.35s ease-out both;
+}
+@keyframes sb-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
