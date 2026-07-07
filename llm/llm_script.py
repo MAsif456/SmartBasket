@@ -1,7 +1,7 @@
 import ollama
 
 # Choose a chat-capable model (ensured it is pulled)
-model_name = 'gemma4:e4b'
+model_name = 'gemma4'
 
 # Initialize conversation with a system prompt (optional) and a user message
 

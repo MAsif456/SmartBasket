@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+venv/
+.venv/
+env/
+
+# Generated database (rebuild via backend/build_db.py)
+*.db
+*.sqlite3
+
+# Node (frontend has its own .gitignore too, but belt-and-braces)
+node_modules/
+
+# Env files
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+
+# Logs
+*.log

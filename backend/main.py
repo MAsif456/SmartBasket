@@ -2,15 +2,31 @@
 
 Run with: uvicorn main:app --reload
 """
+import logging
 import sqlite3
 from pathlib import Path
 from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+
+import llm_parser
+import product_matching
+from schemas import CompareRequest, ComparisonResult, ParseRequest, ParseResponse
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("smartbasket.main")
 
 DB_PATH = Path(__file__).parent / "smartbasket.db"
 
 app = FastAPI(title="SmartBasket API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def get_db():
@@ -25,6 +41,20 @@ def get_db():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.post("/api/parse", response_model=ParseResponse)
+def parse(req: ParseRequest):
+    try:
+        return llm_parser.parse_basket(req.prompt, req.filters)
+    except Exception as exc:
+        logger.exception("POST /api/parse failed")
+        raise HTTPException(status_code=502, detail=f"LLM parsing failed: {type(exc).__name__}: {exc}")
+
+
+@app.post("/api/compare", response_model=ComparisonResult)
+def compare(req: CompareRequest, db: sqlite3.Connection = Depends(get_db)):
+    return product_matching.compare(db, req.items, req.filters)
 
 
 @app.get("/supermarkets")
